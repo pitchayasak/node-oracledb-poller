@@ -4,6 +4,7 @@ grant select on dba_data_files  to ashlogger;
 grant select on dba_free_space  to ashlogger;
 grant select on v_$sysstat      to ashlogger;
 grant select on v_$sysstat      to ashlogger;
+grant select on v_$sgastat      to ashlogger;
 grant select on v_$session      to ashlogger;
 grant select on v_$system_event to ashlogger;
 grant select on v_$parameter    to ashlogger;
