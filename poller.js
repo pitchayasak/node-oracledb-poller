@@ -1,6 +1,7 @@
 var config = require('./config.js');
 var fs = require('fs');
 var generalSQL = require('./sql/generalSQL.js');
+var influx = require('influx');
 
 var oracledb = require('oracledb');
 
@@ -8,6 +9,10 @@ var stepNumber = 0;
 
 setInterval(function() {
   stepNumber++;
+
+  if (stepNumber > 100000) {
+    stepNumber = 0;
+  }
 
   config.dblists.forEach(function(db) {
 
@@ -23,7 +28,9 @@ setInterval(function() {
           csvSave(results,'oracle_sessions', db.dbid, db.dbname, function(err,result){ if(err) {console.log(err);}});
         }
 
-        //saveData(results,'oracle_sessions', function(err,result){ if(err) {console.log(err);}});
+        if (config.influx) {
+          saveData(results,'oracle_sessions', db.dbid, db.dbname, function(err){ if(err) {console.log(err);}});
+        }
       });
 
       // Get Tablespaces usaged
@@ -36,9 +43,12 @@ setInterval(function() {
           csvSave(results,'oracle_tablespaces', db.dbid, db.dbname, function(err,result){ if(err) {console.log(err);}});
         }
 
-        //saveData(results,'oracle_tablespaces', function(err,result){ if(err) {console.log(err);}});
+        if (config.influx) {
+          saveData(results,'oracle_tablespaces', db.dbid, db.dbname, function(err){ if(err) {console.log(err);}});
+        }
       });
 
+      // Get System waited events
       getData(db, generalSQL.waits, function(results){
         console.log((new Date()) + ' : [' + db.dbname + ' ' + stepNumber + '] Result return waits');
 
@@ -48,8 +58,41 @@ setInterval(function() {
           csvSave(results,'oracle_waits', db.dbid, db.dbname, function(err,result){ if(err) {console.log(err);}});
         }
 
-        //saveData(results,'oracle_waits', function(err,result){ if(err) {console.log(err);}});
+        if (config.influx) {
+          saveData(results,'oracle_waits', db.dbid, db.dbname, function(err){ if(err) {console.log(err);}});
+        }
       });
+
+      // Get Physical I/O
+        getData(db, generalSQL.phyio, function(results){
+        console.log((new Date()) + ' : [' + db.dbname + ' ' + stepNumber + '] Result return phyio');
+
+        //console.log(results);
+
+        if (config.csv) {
+          csvSave(results,'oracle_phyio', db.dbid, db.dbname, function(err,result){ if(err) {console.log(err);}});
+        }
+
+        if (config.influx) {
+          saveData(results,'oracle_phyio', db.dbid, db.dbname, function(err){ if(err) {console.log(err);}});
+        }
+      });
+
+      // Get Shared pool free
+        getData(db, generalSQL.shared_pool_free, function(results){
+        console.log((new Date()) + ' : [' + db.dbname + ' ' + stepNumber + '] Result return shared_pool_free');
+
+        //console.log(results);
+
+        if (config.csv) {
+          csvSave(results,'oracle_shared_pool_free', db.dbid, db.dbname, function(err,result){ if(err) {console.log(err);}});
+        }
+
+        if (config.influx) {
+          saveData(results,'oracle_shared_pool_free', db.dbid, db.dbname, function(err){ if(err) {console.log(err);}});
+        }
+      });
+
 
   });
 
@@ -78,21 +121,44 @@ function csvSave(rows, series, dbid, dbname, callback) {
   });
 }
 
-function saveData(datas, saveCollection, callback){
-  MongoClient.connect(url, function(err, db) {
-    if(err) { return callback(err,''); }
-
-    var collection = db.collection(saveCollection);
-    collection.insert(datas, {w:1}, function(err, result) {
-      db.close();
-
-      if(err) { 
-        return callback(err,''); 
-      }
-
-      return callback('',result)
-    });
+function saveData(rows, seriesName, dbid, dbname, callback){
+  var influx_conn = influx({
+    host : config.influx_hostname,
+    port : config.influx_port, 
+    username : config.influx_user,
+    password : config.influx_password,
+    database : config.influx_database
   });
+
+  var rowcount = rows.length;
+
+  var points = [];
+  var point = {};
+
+  rows.forEach(function(row) {
+    point = {};
+
+    point["DBID"] = dbid;
+    point["DBNAME"] = dbname;
+
+    for(var column in row){
+      point[column] = row[column];
+    };
+
+    if (rowcount > 1 ) {
+      points.push(point);
+    }
+  });
+
+  if (rowcount > 1 ) {
+    influx_conn.writePoints(seriesName, points, function(err){
+      return callback(err);
+    });
+  } else {
+    influx_conn.writePoint(seriesName, point, function(err){
+      return callback(err);
+    });
+  } 
 }
 
 function getData(item, statement, callback) {

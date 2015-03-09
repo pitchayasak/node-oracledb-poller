@@ -14,6 +14,12 @@ config.dblists = [
 config.csv = true;
 config.csv_filename = "/tmp/db_metrics.csv";
 
+config.influx = true;
+config.influx_hostname = 'localhost';
+config.influx_port = '8086';
+config.influx_user = 'monit-repo';
+config.influx_password = 'monit-repo';
+config.influx_database = 'poller_repo';
 
 config.step = (5 * 60 * 1000);
 
